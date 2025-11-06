@@ -9,6 +9,10 @@ import { spawn } from 'child_process';
 import ytdl from '@distube/ytdl-core';
 import ffmpeg from 'fluent-ffmpeg';
 import { authMiddleware, checkCredits } from '../middleware/auth.js';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+// Use youtube-dl-exec wrapper for cross-platform yt-dlp execution
+const youtubedl = require('youtube-dl-exec');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -22,8 +26,7 @@ const OUTPUT_DIR = path.join(UPLOADS_DIR, 'output');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
-// yt-dlp executable path
-const ytDlpPath = path.join(__dirname, '..', 'node_modules', 'youtube-dl-exec', 'bin', 'yt-dlp.exe');
+// Note: we prefer youtube-dl-exec wrapper instead of hardcoding a binary path (works on Linux/Windows)
 
 // ytdl-core agent for better reliability
 const ytdlAgent = ytdl.createAgent(undefined, { localAddress: undefined });
@@ -111,18 +114,24 @@ const fetchOEmbedPreview = async (videoUrl) => {
 };
 
 // Download audio using yt-dlp (primary method)
-const downloadWithYtDlp = (url, outputPath, format) => {
-  return new Promise((resolve) => {
-    const ytdlp = spawn(ytDlpPath, [
-      url, '--extract-audio', '--audio-format', format, '--audio-quality', '0',
-      '-o', outputPath, '--no-warnings', '--format', 'bestaudio/best',
-      '--no-playlist', '--max-filesize', '100M'
-    ], { windowsHide: true });
-
-    ytdlp.on('close', (code) => resolve(code === 0 && fs.existsSync(outputPath)));
-    ytdlp.on('error', () => resolve(false));
-    setTimeout(() => { try { ytdlp.kill(); } catch (e) {} resolve(false); }, 120000);
-  });
+const downloadWithYtDlp = async (url, outputPath, format) => {
+  try {
+    const opts = {
+      extractAudio: true,
+      audioFormat: format,
+      audioQuality: '0',
+      output: outputPath,
+      noWarnings: true,
+      format: 'bestaudio/best',
+      noPlaylist: true,
+      maxFilesize: '100M'
+    };
+    // Wrap with timeout similar to 120s
+    await withTimeout(youtubedl(url, opts), 120000, 'yt-dlp timed out');
+    return fs.existsSync(outputPath);
+  } catch (_) {
+    return false;
+  }
 };
 
 // Download audio using ytdl-core + ffmpeg (fallback method)
@@ -157,25 +166,35 @@ const downloadWithYtdlCore = async (url, outputPath, format) => {
 // POST /youtube - Convert YouTube video to audio
 router.post('/youtube', authMiddleware, checkCredits, async (req, res) => {
   try {
-    const { url, format = 'mp3' } = req.body;
+    const rawUrl = req.body.url;
+    const url = decodeURIComponent(Array.isArray(rawUrl) ? rawUrl[0] : (rawUrl || ''));
+    const format = (req.body.format || 'mp3').toLowerCase();
     if (!url) return res.status(400).json({ error: 'YouTube URL is required' });
     if (!/^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/.test(url)) {
       return res.status(400).json({ error: 'Invalid YouTube URL' });
     }
 
-    // Get video metadata
-    const ytdlInfo = await ytdl.getInfo(url, {
-      agent: ytdlAgent,
-      requestOptions: {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept-Language': 'en-US,en;q=0.9'
+    // Try to fetch metadata, but don't fail conversion if it errors
+    let videoTitle = 'youtube_audio';
+    try {
+      const ytdlInfo = await withTimeout(ytdl.getInfo(url, {
+        agent: ytdlAgent,
+        requestOptions: {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept-Language': 'en-US,en;q=0.9'
+          }
         }
-      }
-    });
-
-    const vd = ytdlInfo.videoDetails;
-    const videoTitle = safeFileName(vd.title || `youtube_${vd.videoId}`);
+      }), 6000, 'YouTube info fetch timed out');
+      const vd = ytdlInfo.videoDetails;
+      videoTitle = safeFileName(vd.title || `youtube_${vd.videoId}`);
+    } catch (_) {
+      // try minimal oEmbed for title
+      try {
+        const preview = await withTimeout(fetchOEmbedPreview(url), 4000);
+        videoTitle = safeFileName(preview.title || videoTitle);
+      } catch (_) { /* keep default title */ }
+    }
     const outputFileName = `${uuidv4()}-${videoTitle}.${format}`;
     const outputPath = path.join(OUTPUT_DIR, outputFileName);
 
