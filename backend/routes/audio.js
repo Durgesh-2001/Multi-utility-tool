@@ -84,6 +84,32 @@ const formatViews = (views = 0) => {
 const safeFileName = (name = 'file') => 
   name.replace(/[<>:"/\\|?*\x00-\x1F]/g, '').trim() || 'file';
 
+// Promise timeout helper
+const withTimeout = (promise, ms, message = 'Operation timed out') => {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))
+  ]);
+};
+
+// Lightweight fallback preview via YouTube oEmbed (no API key, limited fields)
+const fetchOEmbedPreview = async (videoUrl) => {
+  const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`;
+  const resp = await fetch(oembedUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  if (!resp.ok) throw new Error(`oEmbed request failed: ${resp.status}`);
+  const data = await resp.json();
+  return {
+    title: data.title,
+    channel: data.author_name,
+    duration: '',
+    views: '',
+    thumbnail: data.thumbnail_url,
+    description: '',
+    uploadDate: '',
+    videoId: ''
+  };
+};
+
 // Download audio using yt-dlp (primary method)
 const downloadWithYtDlp = (url, outputPath, format) => {
   return new Promise((resolve) => {
@@ -187,13 +213,15 @@ router.post('/youtube', authMiddleware, checkCredits, async (req, res) => {
 // GET /youtube/preview - Get YouTube video metadata
 router.get('/youtube/preview', async (req, res) => {
   try {
-    const { url } = req.query;
+    const rawUrl = req.query.url;
+    const url = decodeURIComponent(Array.isArray(rawUrl) ? rawUrl[0] : (rawUrl || ''));
     if (!url) return res.status(400).json({ error: 'YouTube URL is required' });
     if (!/^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/.test(url)) {
       return res.status(400).json({ error: 'Invalid YouTube URL' });
     }
 
-    const info = await ytdl.getInfo(url, {
+    // First try ytdl-core with a short timeout; fall back to oEmbed on failure
+    const info = await withTimeout(ytdl.getInfo(url, {
       agent: ytdlAgent,
       requestOptions: {
         headers: {
@@ -201,7 +229,7 @@ router.get('/youtube/preview', async (req, res) => {
           'Accept-Language': 'en-US,en;q=0.9'
         }
       }
-    });
+    }), 6000, 'YouTube info fetch timed out');
 
     const vd = info.videoDetails;
     return res.json({
@@ -215,11 +243,20 @@ router.get('/youtube/preview', async (req, res) => {
       videoId: vd.videoId || ''
     });
   } catch (err) {
-    return res.status(503).json({
-      error: 'YouTube preview temporarily unavailable',
-      message: 'Unable to fetch video information. The video may be unavailable or region-restricted.',
-      suggestions: ['Try a different YouTube video', 'Ensure the URL is correct']
-    });
+    // Fallback: oEmbed minimal metadata
+    try {
+      const rawUrl = req.query.url;
+      const url = decodeURIComponent(Array.isArray(rawUrl) ? rawUrl[0] : (rawUrl || ''));
+      const preview = await withTimeout(fetchOEmbedPreview(url), 4000, 'oEmbed timed out');
+      return res.json({ ...preview, fallback: 'oembed' });
+    } catch (fallbackErr) {
+      return res.status(503).json({
+        error: 'YouTube preview temporarily unavailable',
+        message: 'Unable to fetch video information (ytdl/oEmbed both failed).',
+        details: err?.message || undefined,
+        suggestions: ['Try a different YouTube video', 'Ensure the URL is correct']
+      });
+    }
   }
 });
 
