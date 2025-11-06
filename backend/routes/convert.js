@@ -7,8 +7,15 @@ import { fileURLToPath } from "url";
 import { spawn } from "child_process";
 
 // pdf-parse import fix
-import pkg from "pdf-parse";
-const pdfParse = pkg;
+// NOTE: Using createRequire to import pdf-parse as CommonJS.
+// A direct ESM `import pdfParse from "pdf-parse"` caused a production crash on Railway
+// where the library executed its internal debug snippet trying to read
+// `./test/data/05-versions-space.pdf` (ENOENT). Requiring it keeps `module.parent`
+// defined so debug code (which checks `!module.parent`) does not run.
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const pdfParse = require("pdf-parse");
 
 // mammoth (for basic DOCX → TXT)
 import mammoth from "mammoth";
@@ -82,10 +89,16 @@ router.post("/file", upload.single("file"), async (req, res) => {
 
     // === PDF → TXT ===
     if (originalExt === ".pdf" && format === "txt") {
-      const dataBuffer = fs.readFileSync(inputPath);
-      const data = await pdfParse(dataBuffer);
-      fs.unlinkSync(inputPath); // cleanup
-      return res.type("text/plain").send(data.text);
+      try {
+        const dataBuffer = fs.readFileSync(inputPath);
+        const data = await pdfParse(dataBuffer);
+        fs.unlinkSync(inputPath); // cleanup
+        return res.type("text/plain").send(data.text);
+      } catch (e) {
+        console.error("PDF→TXT parse error", e);
+        fs.existsSync(inputPath) && fs.unlinkSync(inputPath);
+        return res.status(500).json({ error: "PDF parsing failed", details: e.message });
+      }
     }
 
     // === DOCX → TXT ===
