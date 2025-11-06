@@ -1,0 +1,470 @@
+/* ==========================================================================
+   Base Styles / Reset / Theming
+   ========================================================================== */
+/* 1. Hard Reset (avoid UA defaults like Times New Roman) */
+:root,
+:root * {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  font-size: 100%;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* Remove default form styles */
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+textarea {
+  resize: vertical;
+}
+
+button {
+  cursor: pointer;
+}
+
+/* 2. CSS Custom Properties (Design Tokens) */
+:root {
+  /* Color (light) */
+  --color-bg: #ffffff;
+  --color-bg-alt: #f6f8fa;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+  --color-text: #1e293b;
+  --color-text-muted: #64748b;
+  --color-accent: #1a1a1a;
+  --color-accent-hover: #333333;
+  --color-danger: #dc2626;
+  --color-warning: #f59e0b;
+  --color-success: #16a34a;
+  --color-info: #0ea5e9;
+
+  /* Gradients */
+  --gradient-accent: linear-gradient(135deg, var(--color-accent) 0%, #ff8a3c 100%);
+  --gradient-surface: linear-gradient(145deg, #ffffff 0%, #f1f5f9 100%);
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+  --shadow-focus: 0 0 0 3px rgba(236, 91, 0, 0.3);
+
+  /* Typography scale (fluid) */
+  --font-size-xs: clamp(0.7rem, 0.7rem + 0.2vw, 0.75rem);
+  --font-size-sm: clamp(0.82rem, 0.8rem + 0.25vw, 0.9rem);
+  --font-size-base: clamp(0.95rem, 0.9rem + 0.3vw, 1rem);
+  --font-size-md: clamp(1.05rem, 1rem + 0.35vw, 1.125rem);
+  --font-size-lg: clamp(1.25rem, 1.1rem + 0.8vw, 1.5rem);
+  --font-size-xl: clamp(1.6rem, 1.3rem + 1.2vw, 2rem);
+  --font-size-xxl: clamp(2.1rem, 1.6rem + 2vw, 3rem);
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* Line heights */
+  --lh-tight: 1.15;
+  --lh-base: 1.5;
+  --lh-relaxed: 1.65;
+
+  /* Spacing scale (8pt w/ fine steps) */
+  --space-0: 0;
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 14px;
+  --space-8: 16px;
+  --space-10: 20px;
+  --space-12: 24px;
+  --space-16: 32px;
+  --space-20: 40px;
+  --space-24: 48px;
+  --space-32: 64px;
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-pill: 1000px;
+  --radius-round: 50%;
+  --border-width: 1px;
+
+  /* Motion */
+  --ease-standard: cubic-bezier(.4, 0, .2, 1);
+  --ease-emph: cubic-bezier(.4, 0, .2, 1);
+  --transition-fast: 120ms var(--ease-standard);
+  --transition-base: 240ms var(--ease-standard);
+  --transition-slow: 420ms var(--ease-standard);
+
+  /* Layout max widths */
+  --container-sm: 640px;
+  --container-md: 860px;
+  --container-lg: 1200px;
+  --content-max: 72ch;
+}
+
+/* Dark theme */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-bg: #0e0f12;
+    --color-bg-alt: #161a20;
+    --color-surface: #1d232d;
+    --color-surface-alt: #242b36;
+    --color-border: #2f3944;
+    --color-border-strong: #3d4a56;
+    --color-text: #f1f5f9;
+    --color-text-muted: #94a3b8;
+    --color-accent: #ff7a21;
+    --color-accent-hover: #ff8f45;
+    --gradient-surface: linear-gradient(145deg, #1d232d 0%, #242b36 100%);
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 8px -2px rgba(0, 0, 0, 0.55), 0 2px 4px -2px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 12px 20px -5px rgba(0, 0, 0, 0.6), 0 6px 8px -4px rgba(0, 0, 0, 0.4);
+    --shadow-focus: 0 0 0 3px rgba(255, 122, 33, 0.4);
+  }
+}
+
+/* Explicit theme overrides */
+[data-theme='dark'] {
+  color-scheme: dark;
+  --color-bg: #0e0f12;
+  --color-bg-alt: #161a20;
+  --color-surface: #1d232d;
+  --color-surface-alt: #242b36;
+  --color-border: #2f3944;
+  --color-border-strong: #3d4a56;
+  --color-text: #f1f5f9;
+  --color-text-muted: #94a3b8;
+  --color-accent: #ffffff;
+  --color-accent-hover: #e5e5e5;
+  --gradient-surface: linear-gradient(145deg, #1d232d 0%, #242b36 100%);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 8px -2px rgba(0, 0, 0, 0.55), 0 2px 4px -2px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 20px -5px rgba(0, 0, 0, 0.6), 0 6px 8px -4px rgba(0, 0, 0, 0.4);
+  --shadow-focus: 0 0 0 3px rgba(255, 255, 255, 0.4);
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+  --color-bg: #ffffff;
+  --color-bg-alt: #f6f8fa;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+  --color-text: #1e293b;
+  --color-text-muted: #64748b;
+  /* Neutral monochrome accent replacing previous orange */
+  --color-accent: #111111;
+  --color-accent-hover: #2b2b2b;
+  --gradient-surface: linear-gradient(145deg, #ffffff 0%, #f1f5f9 100%);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+  --shadow-focus: 0 0 0 3px rgba(0, 0, 0, 0.2);
+}
+
+/* 3. Base Element Defaults */
+html,
+body {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--lh-base);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  min-width: 320px;
+  accent-color: var(--color-accent);
+  animation: app-fade-in 0.6s ease forwards;
+}
+
+img,
+svg,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+  transition: color var(--transition-base);
+}
+
+a:hover,
+a:focus-visible {
+  color: var(--color-accent-hover);
+}
+
+p {
+  max-width: var(--content-max);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.02em;
+}
+
+h1 {
+  font-size: var(--font-size-xxl);
+}
+
+h2 {
+  font-size: var(--font-size-xl);
+}
+
+h3 {
+  font-size: var(--font-size-lg);
+}
+
+h4 {
+  font-size: var(--font-size-md);
+}
+
+h5 {
+  font-size: var(--font-size-base);
+}
+
+h6 {
+  font-size: var(--font-size-sm);
+}
+
+/* 4. Scrollbar (WebKit) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-strong);
+}
+
+/* 5. Focus styles */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* 6. Animations */
+@keyframes app-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes card-pop {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-2px) scale(1.01);
+  }
+
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -500px 0;
+  }
+
+  100% {
+    background-position: 500px 0;
+  }
+}
+
+@keyframes pulse-soft {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* Reduce Motion */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 7. Layout Helpers (basic) */
+.container {
+  width: 100%;
+  margin-inline: auto;
+  padding-inline: var(--space-8);
+  max-width: var(--container-lg);
+}
+
+.container--narrow {
+  max-width: var(--container-md);
+}
+
+.container--tight {
+  max-width: var(--container-sm);
+}
+
+main {
+  display: block;
+}
+
+/* 8. Root application wrapper */
+#root,
+.app {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.app__content {
+  flex: 1 1 auto;
+}
+
+/* 9. Selection */
+::selection {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+/* 10. Forms minimal baseline */
+input[type='text'],
+input[type='email'],
+input[type='password'],
+textarea,
+select {
+  width: 100%;
+  background: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border);
+  padding: var(--space-8) var(--space-10);
+  border-radius: var(--radius-sm);
+  line-height: var(--lh-tight);
+  transition: border-color var(--transition-base), background var(--transition-base), box-shadow var(--transition-base);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-focus);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* 11. Tables (minimal) */
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  text-align: left;
+  padding: var(--space-6) var(--space-8);
+  font-size: var(--font-size-sm);
+}
+
+th {
+  font-weight: var(--font-weight-semibold);
+  background: var(--color-surface-alt);
+}
+
+tr {
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+
+/* 12. Code */
+code,
+pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 0.95em;
+}
+
+pre {
+  padding: var(--space-8);
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-sm);
+  overflow: auto;
+}

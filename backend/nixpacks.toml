@@ -1,0 +1,5 @@
+# backend/nixpacks.toml
+
+[phases.setup]
+# Add "nodejs_20" (or your preferred version) to the list
+nixPkgs = ["ffmpeg", "nodejs_20"]

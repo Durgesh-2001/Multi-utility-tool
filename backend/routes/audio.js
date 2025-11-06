@@ -1,0 +1,278 @@
+import express from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import { spawn } from 'child_process';
+import ytdl from '@distube/ytdl-core';
+import ffmpeg from 'fluent-ffmpeg';
+import { authMiddleware, checkCredits } from '../middleware/auth.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const router = express.Router();
+
+// SECTION 1: CONFIGURATION & SETUP
+// Directory paths
+const UPLOADS_DIR = path.join('uploads', 'audio');
+const OUTPUT_DIR = path.join(UPLOADS_DIR, 'output');
+[UPLOADS_DIR, OUTPUT_DIR].forEach(dir => {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+});
+
+// yt-dlp executable path
+const ytDlpPath = path.join(__dirname, '..', 'node_modules', 'youtube-dl-exec', 'bin', 'yt-dlp.exe');
+
+// ytdl-core agent for better reliability
+const ytdlAgent = ytdl.createAgent(undefined, { localAddress: undefined });
+
+// Auto-cleanup: Delete ytdl-core debug files on startup and periodically
+const cleanupDebugFiles = () => {
+  const backendDir = path.join(__dirname, '..');
+  try {
+    fs.readdirSync(backendDir).forEach(file => {
+      if (file.match(/^\d+-player-script\.js$/)) {
+        try {
+          fs.unlinkSync(path.join(backendDir, file));
+        } catch (e) { /* file may already be deleted */ }
+      }
+    });
+  } catch (err) { /* ignore */ }
+};
+
+// Clean on startup
+cleanupDebugFiles();
+
+// Clean periodically (every 30 seconds) instead of watching This prevents nodemon restart loops
+setInterval(cleanupDebugFiles, 30000);
+
+// Multer configuration for video file uploads
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+    filename: (req, file, cb) => cb(null, `${uuidv4()}-${file.originalname}`)
+  }),
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/flv', 'video/webm', 'video/mkv'];
+    cb(null, allowedTypes.includes(file.mimetype));
+  },
+  limits: { fileSize: 100 * 1024 * 1024 } // 100MB
+});
+
+// SECTION 2: HELPER FUNCTIONS
+// Format seconds to H:MM:SS or M:SS
+const formatDuration = (seconds = 0) => {
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  return hrs > 0 
+    ? `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+    : `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+// Format view count (1.5M, 10.2K, etc.)
+const formatViews = (views = 0) => {
+  const v = Number(views) || 0;
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+  return `${v}`;
+};
+
+// Remove invalid filename characters
+const safeFileName = (name = 'file') => 
+  name.replace(/[<>:"/\\|?*\x00-\x1F]/g, '').trim() || 'file';
+
+// Download audio using yt-dlp (primary method)
+const downloadWithYtDlp = (url, outputPath, format) => {
+  return new Promise((resolve) => {
+    const ytdlp = spawn(ytDlpPath, [
+      url, '--extract-audio', '--audio-format', format, '--audio-quality', '0',
+      '-o', outputPath, '--no-warnings', '--format', 'bestaudio/best',
+      '--no-playlist', '--max-filesize', '100M'
+    ], { windowsHide: true });
+
+    ytdlp.on('close', (code) => resolve(code === 0 && fs.existsSync(outputPath)));
+    ytdlp.on('error', () => resolve(false));
+    setTimeout(() => { try { ytdlp.kill(); } catch (e) {} resolve(false); }, 120000);
+  });
+};
+
+// Download audio using ytdl-core + ffmpeg (fallback method)
+const downloadWithYtdlCore = async (url, outputPath, format) => {
+  const audioStream = ytdl(url, {
+    quality: 'highestaudio',
+    filter: 'audioonly',
+    agent: ytdlAgent,
+    requestOptions: {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    }
+  });
+
+  const audioCodec = format === 'mp3' ? 'libmp3lame' : format === 'wav' ? 'pcm_s16le' : 'flac';
+  const audioBitrate = format === 'mp3' ? '192k' : format === 'wav' ? '1411k' : '320k';
+
+  return new Promise((resolve, reject) => {
+    ffmpeg(audioStream)
+      .audioCodec(audioCodec)
+      .audioBitrate(audioBitrate)
+      .format(format)
+      .on('end', resolve)
+      .on('error', reject)
+      .save(outputPath);
+  });
+};
+
+// SECTION 3: API ENDPOINTS
+// POST /youtube - Convert YouTube video to audio
+router.post('/youtube', authMiddleware, checkCredits, async (req, res) => {
+  try {
+    const { url, format = 'mp3' } = req.body;
+    if (!url) return res.status(400).json({ error: 'YouTube URL is required' });
+    if (!/^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/.test(url)) {
+      return res.status(400).json({ error: 'Invalid YouTube URL' });
+    }
+
+    // Get video metadata
+    const ytdlInfo = await ytdl.getInfo(url, {
+      agent: ytdlAgent,
+      requestOptions: {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept-Language': 'en-US,en;q=0.9'
+        }
+      }
+    });
+
+    const vd = ytdlInfo.videoDetails;
+    const videoTitle = safeFileName(vd.title || `youtube_${vd.videoId}`);
+    const outputFileName = `${uuidv4()}-${videoTitle}.${format}`;
+    const outputPath = path.join(OUTPUT_DIR, outputFileName);
+
+    // Try yt-dlp first, fallback to ytdl-core if it fails
+    let success = await downloadWithYtDlp(url, outputPath, format);
+    
+    if (!success) {
+      await downloadWithYtdlCore(url, outputPath, format);
+    }
+
+    return res.json({
+      success: true,
+      message: 'Audio converted successfully',
+      downloadUrl: `/api/audio/download/${path.basename(outputPath)}`,
+      filename: `${videoTitle}.${format}`,
+      format
+    });
+  } catch (err) {
+    // User-friendly error messages
+    let message = 'Unable to convert this video. Please try a different video or format.';
+    if (err.message?.includes('403')) {
+      message = 'This video is currently unavailable for download. Please try again later.';
+    } else if (err.message?.includes('private') || err.message?.includes('unavailable')) {
+      message = 'This video is private or unavailable. Please check the URL.';
+    }
+
+    return res.status(503).json({
+      error: 'Audio conversion failed',
+      message,
+      suggestion: 'Try a different YouTube video URL or try again in a few moments.'
+    });
+  }
+});
+
+// GET /youtube/preview - Get YouTube video metadata
+router.get('/youtube/preview', async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url) return res.status(400).json({ error: 'YouTube URL is required' });
+    if (!/^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/.test(url)) {
+      return res.status(400).json({ error: 'Invalid YouTube URL' });
+    }
+
+    const info = await ytdl.getInfo(url, {
+      agent: ytdlAgent,
+      requestOptions: {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept-Language': 'en-US,en;q=0.9'
+        }
+      }
+    });
+
+    const vd = info.videoDetails;
+    return res.json({
+      title: vd.title,
+      channel: vd.author?.name || 'Unknown Channel',
+      duration: formatDuration(parseInt(vd.lengthSeconds || 0)),
+      views: formatViews(parseInt(vd.viewCount || 0)),
+      thumbnail: vd.thumbnails?.[vd.thumbnails.length - 1]?.url || null,
+      description: (vd.description || '').substring(0, 200) + '...',
+      uploadDate: vd.uploadDate || '',
+      videoId: vd.videoId || ''
+    });
+  } catch (err) {
+    return res.status(503).json({
+      error: 'YouTube preview temporarily unavailable',
+      message: 'Unable to fetch video information. The video may be unavailable or region-restricted.',
+      suggestions: ['Try a different YouTube video', 'Ensure the URL is correct']
+    });
+  }
+});
+
+// POST /video - Convert uploaded video file to audio
+router.post('/video', authMiddleware, checkCredits, upload.single('video'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No video file uploaded' });
+
+    const { format = 'mp3' } = req.body;
+    const inputPath = req.file.path;
+    const outputFileName = `${uuidv4()}-${path.parse(req.file.originalname).name}.${format}`;
+    const outputPath = path.join(OUTPUT_DIR, outputFileName);
+
+    const audioCodec = format === 'mp3' ? 'libmp3lame' : format === 'wav' ? 'pcm_s16le' : 'flac';
+    const audioBitrate = format === 'mp3' ? '192k' : format === 'wav' ? '1411k' : '320k';
+
+    await new Promise((resolve, reject) => {
+      ffmpeg(inputPath)
+        .audioCodec(audioCodec)
+        .audioBitrate(audioBitrate)
+        .format(format)
+        .on('end', resolve)
+        .on('error', reject)
+        .save(outputPath);
+    });
+
+    // Cleanup input file
+    try { fs.unlinkSync(inputPath); } catch (e) { /* ignore */ }
+
+    // Send file and cleanup after download
+    return res.download(outputPath, outputFileName, (err) => {
+      setTimeout(() => {
+        try { fs.unlinkSync(outputPath); } catch (e) { /* ignore */ }
+      }, 5000);
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Video conversion failed', details: err.message });
+  }
+});
+
+// GET /download/:filename - Download converted audio file
+router.get('/download/:filename', (req, res) => {
+  const filePath = path.join(OUTPUT_DIR, req.params.filename);
+  
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'File not found' });
+  }
+
+  return res.download(filePath, req.params.filename, () => {
+    setTimeout(() => {
+      try { fs.unlinkSync(filePath); } catch (e) { /* ignore */ }
+    }, 5000);
+  });
+});
+
+export default router;

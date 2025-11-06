@@ -1,0 +1,9 @@
+/* Modular stylesheet entrypoint */
+/* This file intentionally slim. All real styles live in /styles/*. */
+@import './styles/base.css';
+@import './styles/components.css';
+@import './styles/utilities.css';
+
+/* If legacy components still import old classnames, add light shim rules below. */
+/* Example (remove after full migration): */
+/* button.primary { @apply? Not using Tailwind. Instead map to new .btn--primary */
