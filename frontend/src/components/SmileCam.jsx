@@ -377,16 +377,14 @@ const SmileCam = () => {
                   <div className="smile-cam__live">
                     <button className="smile-cam__btn" onClick={handleCapture} disabled={isCapturing}>📸 Capture</button>
                     {isMobile && <button className="smile-cam__btn" onClick={switchCamera}>🔄 Switch</button>}
-                    {isMobile && (
-                      <button 
-                        className={`smile-cam__btn smile-cam__btn--torch ${torchEnabled ? 'smile-cam__btn--torch-on' : ''}`} 
-                        onClick={toggleTorch}
-                        disabled={!torchSupported}
-                        title={!torchSupported ? 'Flashlight not supported on this camera' : (torchEnabled ? 'Turn off flashlight' : 'Turn on flashlight')}
-                      >
-                        {torchEnabled ? '🔦' : '💡'} {torchEnabled ? 'On' : 'Off'}
-                      </button>
-                    )}
+                    <button 
+                      className={`smile-cam__btn smile-cam__btn--torch ${torchEnabled ? 'smile-cam__btn--torch-on' : ''}`} 
+                      onClick={toggleTorch}
+                      disabled={!torchSupported}
+                      title={!torchSupported ? 'Flashlight not supported on this camera' : (torchEnabled ? 'Turn off flashlight' : 'Turn on flashlight')}
+                    >
+                      {torchEnabled ? '🔦' : '💡'} {torchEnabled ? 'On' : 'Off'}
+                    </button>
                     <button className={`smile-cam__btn ${autoCaptureMode ? 'smile-cam__btn--active' : ''}`} onClick={toggleAutoCapture}>🤖 Auto</button>
                     <button className="smile-cam__btn" onClick={toggleFullscreen}>🗗 Exit Fullscreen</button>
                     <button className="smile-cam__btn smile-cam__btn--stop" onClick={stopCamera}>⏹️ Stop</button>
@@ -425,16 +423,14 @@ const SmileCam = () => {
                 <div className="smile-cam__live">
                   <button className="smile-cam__btn" onClick={handleCapture} disabled={isCapturing}>📸 Capture</button>
                   {isMobile && <button className="smile-cam__btn" onClick={switchCamera}>🔄 Switch</button>}
-                  {isMobile && (
-                    <button 
-                      className={`smile-cam__btn smile-cam__btn--torch ${torchEnabled ? 'smile-cam__btn--torch-on' : ''}`} 
-                      onClick={toggleTorch}
-                      disabled={!torchSupported}
-                      title={!torchSupported ? 'Flashlight not supported on this camera' : (torchEnabled ? 'Turn off flashlight' : 'Turn on flashlight')}
-                    >
-                      {torchEnabled ? '🔦' : '💡'} {torchEnabled ? 'On' : 'Off'}
-                    </button>
-                  )}
+                  <button 
+                    className={`smile-cam__btn smile-cam__btn--torch ${torchEnabled ? 'smile-cam__btn--torch-on' : ''}`} 
+                    onClick={toggleTorch}
+                    disabled={!torchSupported}
+                    title={!torchSupported ? 'Flashlight not supported on this camera' : (torchEnabled ? 'Turn off flashlight' : 'Turn on flashlight')}
+                  >
+                    {torchEnabled ? '🔦' : '💡'} {torchEnabled ? 'On' : 'Off'}
+                  </button>
                   <button className={`smile-cam__btn ${autoCaptureMode ? 'smile-cam__btn--active' : ''}`} onClick={toggleAutoCapture}>🤖 Auto</button>
                   <button className="smile-cam__btn" onClick={toggleFullscreen}>
                     {isFullscreen ? '🗗 Exit Fullscreen' : '⛶ Fullscreen'}
