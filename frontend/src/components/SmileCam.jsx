@@ -20,12 +20,16 @@ const SmileCam = () => {
   const [isSmileDetected, setIsSmileDetected] = useState(false);
   const [autoCaptureMode, setAutoCaptureMode] = useState(false);
   const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [torchEnabled, setTorchEnabled] = useState(false);
+  const [torchSupported, setTorchSupported] = useState(false);
 
   // --- Refs ---
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const detectionIntervalRef = useRef(null);
+  const viewportRef = useRef(null);
 
   const API_BASE_URL = `${import.meta.env.VITE_BACKEND_URL}/api`;
 
@@ -50,13 +54,29 @@ const SmileCam = () => {
     }
     setCameraError('');
     const currentCameraMode = mode || cameraMode;
-    const constraints = { video: { facingMode: currentCameraMode, width: { ideal: 1280 }, height: { ideal: 720 } } };
+    const constraints = { 
+      video: { 
+        facingMode: currentCameraMode, 
+        width: { ideal: 1280 }, 
+        height: { ideal: 720 } 
+      } 
+    };
 
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = mediaStream;
       setStream(mediaStream);
       setIsActive(true);
+
+      // Check if torch is supported
+      const videoTrack = mediaStream.getVideoTracks()[0];
+      const capabilities = videoTrack.getCapabilities();
+      if (capabilities.torch) {
+        setTorchSupported(true);
+      } else {
+        setTorchSupported(false);
+        setTorchEnabled(false);
+      }
     } catch (error) {
       console.error('Camera access error:', error);
       setCameraError('Failed to access camera. Please check permissions.');
@@ -153,10 +173,46 @@ const SmileCam = () => {
   const switchCamera = useCallback(() => {
     const newMode = cameraMode === 'user' ? 'environment' : 'user';
     setCameraMode(newMode);
+    setTorchEnabled(false); // Turn off torch when switching cameras
     startCamera(newMode);
   }, [cameraMode, startCamera]);
   
   const toggleAutoCapture = () => setAutoCaptureMode(prev => !prev);
+
+  const toggleTorch = useCallback(async () => {
+    if (!streamRef.current || !torchSupported) return;
+
+    try {
+      const videoTrack = streamRef.current.getVideoTracks()[0];
+      const newTorchState = !torchEnabled;
+      
+      await videoTrack.applyConstraints({
+        advanced: [{ torch: newTorchState }]
+      });
+      
+      setTorchEnabled(newTorchState);
+    } catch (error) {
+      console.error('Error toggling torch:', error);
+      setCameraError('Failed to toggle flashlight.');
+      setTimeout(() => setCameraError(''), 3000);
+    }
+  }, [torchEnabled, torchSupported]);
+
+  const toggleFullscreen = useCallback(() => {
+    if (!viewportRef.current) return;
+
+    if (!document.fullscreenElement) {
+      viewportRef.current.requestFullscreen().then(() => {
+        setIsFullscreen(true);
+      }).catch(err => {
+        console.error('Error attempting to enable fullscreen:', err);
+      });
+    } else {
+      document.exitFullscreen().then(() => {
+        setIsFullscreen(false);
+      });
+    }
+  }, []);
 
   const handleDeviceSelect = useCallback((device) => {
     if (device === 'mobile') {
@@ -195,7 +251,14 @@ const SmileCam = () => {
     };
     loadModels();
 
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
     return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
@@ -268,7 +331,7 @@ const SmileCam = () => {
       <div className="smile-cam__shell">
         <div className="smile-cam__subtitle">AI-powered camera that captures photos when you smile.</div>
         <div className="smile-cam__stage">
-          <div className="smile-cam__viewport">
+          <div className={`smile-cam__viewport ${isFullscreen ? 'smile-cam__viewport--fullscreen' : ''}`} ref={viewportRef}>
             {cameraError && <div className="smile-cam__error">{cameraError}</div>}
             <video ref={videoRef} autoPlay playsInline muted className={`smile-cam__video ${!capturedImage && isActive ? 'smile-cam__video--visible' : ''}`} />
             {capturedImage && <img src={URL.createObjectURL(capturedImage)} alt="Captured" className="smile-cam__capture smile-cam__capture--visible" />}
@@ -283,8 +346,54 @@ const SmileCam = () => {
                 {autoCaptureMode ? (isSmileDetected ? 'Smile!' : 'Detecting...') : 'Ready'}
               </div>
             )}
+            {isFullscreen && processingResult && (
+              <div className={`smile-cam__analysis smile-cam__analysis--fullscreen ${processingResult.success ? 'smile-cam__analysis--success' : 'smile-cam__analysis--error'}`}>
+                {processingResult.success ? (
+                  <>
+                    <p>Smile Detected: {processingResult.expressions.smile}</p>
+                    <p>Confidence: {processingResult.expressions.confidence}%</p>
+                  </>
+                ) : (
+                  <p>{processingResult.error}</p>
+                )}
+              </div>
+            )}
+            {isFullscreen && (
+              <div className="smile-cam__controls smile-cam__controls--fullscreen">
+                {!isActive && !capturedImage && (
+                  <button className="smile-cam__btn smile-cam__btn--start" onClick={() => startCamera(cameraMode)} disabled={!modelsLoaded}>
+                    {modelsLoaded ? 'Start Camera' : 'Loading Models...'}
+                  </button>
+                )}
+                {isActive && (
+                  <div className="smile-cam__live">
+                    <button className="smile-cam__btn" onClick={handleCapture} disabled={isCapturing}>📸 Capture</button>
+                    {isMobile && <button className="smile-cam__btn" onClick={switchCamera}>🔄 Switch</button>}
+                    {isMobile && torchSupported && (
+                      <button 
+                        className={`smile-cam__btn smile-cam__btn--torch ${torchEnabled ? 'smile-cam__btn--torch-on' : ''}`} 
+                        onClick={toggleTorch}
+                        title={torchEnabled ? 'Turn off flashlight' : 'Turn on flashlight'}
+                      >
+                        {torchEnabled ? '🔦' : '💡'} {torchEnabled ? 'On' : 'Off'}
+                      </button>
+                    )}
+                    <button className={`smile-cam__btn ${autoCaptureMode ? 'smile-cam__btn--active' : ''}`} onClick={toggleAutoCapture}>🤖 Auto</button>
+                    <button className="smile-cam__btn" onClick={toggleFullscreen}>🗗 Exit Fullscreen</button>
+                    <button className="smile-cam__btn smile-cam__btn--stop" onClick={stopCamera}>⏹️ Stop</button>
+                  </div>
+                )}
+                {capturedImage && (
+                  <div className="smile-cam__captured">
+                    <button className="smile-cam__btn" onClick={retakePhoto}>🔄 Retake</button>
+                    <button className="smile-cam__btn smile-cam__btn--process" onClick={processImage} disabled={isProcessing}>🔍 Analyze</button>
+                    <button className="smile-cam__btn" onClick={downloadImage}>💾 Download</button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          {processingResult && (
+          {!isFullscreen && processingResult && (
             <div className={`smile-cam__analysis ${processingResult.success ? 'smile-cam__analysis--success' : 'smile-cam__analysis--error'}`}>
               {processingResult.success ? (
                 <>
@@ -296,28 +405,42 @@ const SmileCam = () => {
               )}
             </div>
           )}
-          <div className="smile-cam__controls">
-            {!isActive && !capturedImage && (
-              <button className="smile-cam__btn smile-cam__btn--start" onClick={() => startCamera(cameraMode)} disabled={!modelsLoaded}>
-                {modelsLoaded ? 'Start Camera' : 'Loading Models...'}
-              </button>
-            )}
-            {isActive && (
-              <div className="smile-cam__live">
-                <button className="smile-cam__btn" onClick={handleCapture} disabled={isCapturing}>📸 Capture</button>
-                {isMobile && <button className="smile-cam__btn" onClick={switchCamera}>🔄 Switch</button>}
-                <button className={`smile-cam__btn ${autoCaptureMode ? 'smile-cam__btn--active' : ''}`} onClick={toggleAutoCapture}>🤖 Auto</button>
-                <button className="smile-cam__btn smile-cam__btn--stop" onClick={stopCamera}>⏹️ Stop</button>
-              </div>
-            )}
-            {capturedImage && (
-              <div className="smile-cam__captured">
-                <button className="smile-cam__btn" onClick={retakePhoto}>🔄 Retake</button>
-                <button className="smile-cam__btn smile-cam__btn--process" onClick={processImage} disabled={isProcessing}>🔍 Analyze</button>
-                <button className="smile-cam__btn" onClick={downloadImage}>💾 Download</button>
-              </div>
-            )}
-          </div>
+          {!isFullscreen && (
+            <div className="smile-cam__controls">
+              {!isActive && !capturedImage && (
+                <button className="smile-cam__btn smile-cam__btn--start" onClick={() => startCamera(cameraMode)} disabled={!modelsLoaded}>
+                  {modelsLoaded ? 'Start Camera' : 'Loading Models...'}
+                </button>
+              )}
+              {isActive && (
+                <div className="smile-cam__live">
+                  <button className="smile-cam__btn" onClick={handleCapture} disabled={isCapturing}>📸 Capture</button>
+                  {isMobile && <button className="smile-cam__btn" onClick={switchCamera}>🔄 Switch</button>}
+                  {isMobile && torchSupported && (
+                    <button 
+                      className={`smile-cam__btn smile-cam__btn--torch ${torchEnabled ? 'smile-cam__btn--torch-on' : ''}`} 
+                      onClick={toggleTorch}
+                      title={torchEnabled ? 'Turn off flashlight' : 'Turn on flashlight'}
+                    >
+                      {torchEnabled ? '🔦' : '💡'} {torchEnabled ? 'On' : 'Off'}
+                    </button>
+                  )}
+                  <button className={`smile-cam__btn ${autoCaptureMode ? 'smile-cam__btn--active' : ''}`} onClick={toggleAutoCapture}>🤖 Auto</button>
+                  <button className="smile-cam__btn" onClick={toggleFullscreen}>
+                    {isFullscreen ? '🗗 Exit Fullscreen' : '⛶ Fullscreen'}
+                  </button>
+                  <button className="smile-cam__btn smile-cam__btn--stop" onClick={stopCamera}>⏹️ Stop</button>
+                </div>
+              )}
+              {capturedImage && (
+                <div className="smile-cam__captured">
+                  <button className="smile-cam__btn" onClick={retakePhoto}>🔄 Retake</button>
+                  <button className="smile-cam__btn smile-cam__btn--process" onClick={processImage} disabled={isProcessing}>🔍 Analyze</button>
+                  <button className="smile-cam__btn" onClick={downloadImage}>💾 Download</button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
