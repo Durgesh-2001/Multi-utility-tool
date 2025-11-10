@@ -3462,6 +3462,11 @@
     transition: all var(--transition-base);
 }
 
+.smile-cam__btn--torch:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 .smile-cam__btn--torch-on {
     background: #fbbf24;
     color: #1f2937;

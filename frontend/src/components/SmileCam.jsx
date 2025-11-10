@@ -73,15 +73,24 @@ const SmileCam = () => {
       const capabilities = videoTrack.getCapabilities();
       if (capabilities.torch) {
         setTorchSupported(true);
+        // Reapply torch state if it was enabled
+        if (torchEnabled) {
+          try {
+            await videoTrack.applyConstraints({
+              advanced: [{ torch: true }]
+            });
+          } catch (err) {
+            console.error('Error reapplying torch:', err);
+          }
+        }
       } else {
         setTorchSupported(false);
-        setTorchEnabled(false);
       }
     } catch (error) {
       console.error('Camera access error:', error);
       setCameraError('Failed to access camera. Please check permissions.');
     }
-  }, [cameraMode, stopCamera]);
+  }, [cameraMode, stopCamera, torchEnabled]);
 
   const handleCapture = useCallback(() => {
     if (!videoRef.current || !canvasRef.current || isCapturing) return;
@@ -173,7 +182,6 @@ const SmileCam = () => {
   const switchCamera = useCallback(() => {
     const newMode = cameraMode === 'user' ? 'environment' : 'user';
     setCameraMode(newMode);
-    setTorchEnabled(false); // Turn off torch when switching cameras
     startCamera(newMode);
   }, [cameraMode, startCamera]);
   
@@ -369,11 +377,12 @@ const SmileCam = () => {
                   <div className="smile-cam__live">
                     <button className="smile-cam__btn" onClick={handleCapture} disabled={isCapturing}>📸 Capture</button>
                     {isMobile && <button className="smile-cam__btn" onClick={switchCamera}>🔄 Switch</button>}
-                    {isMobile && torchSupported && (
+                    {isMobile && (
                       <button 
                         className={`smile-cam__btn smile-cam__btn--torch ${torchEnabled ? 'smile-cam__btn--torch-on' : ''}`} 
                         onClick={toggleTorch}
-                        title={torchEnabled ? 'Turn off flashlight' : 'Turn on flashlight'}
+                        disabled={!torchSupported}
+                        title={!torchSupported ? 'Flashlight not supported on this camera' : (torchEnabled ? 'Turn off flashlight' : 'Turn on flashlight')}
                       >
                         {torchEnabled ? '🔦' : '💡'} {torchEnabled ? 'On' : 'Off'}
                       </button>
@@ -416,11 +425,12 @@ const SmileCam = () => {
                 <div className="smile-cam__live">
                   <button className="smile-cam__btn" onClick={handleCapture} disabled={isCapturing}>📸 Capture</button>
                   {isMobile && <button className="smile-cam__btn" onClick={switchCamera}>🔄 Switch</button>}
-                  {isMobile && torchSupported && (
+                  {isMobile && (
                     <button 
                       className={`smile-cam__btn smile-cam__btn--torch ${torchEnabled ? 'smile-cam__btn--torch-on' : ''}`} 
                       onClick={toggleTorch}
-                      title={torchEnabled ? 'Turn off flashlight' : 'Turn on flashlight'}
+                      disabled={!torchSupported}
+                      title={!torchSupported ? 'Flashlight not supported on this camera' : (torchEnabled ? 'Turn off flashlight' : 'Turn on flashlight')}
                     >
                       {torchEnabled ? '🔦' : '💡'} {torchEnabled ? 'On' : 'Off'}
                     </button>
